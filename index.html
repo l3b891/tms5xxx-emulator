@@ -1,0 +1,292 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>TI LPC Speech Synthesizer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f4f5f8;--card:#fff;--tx:#14161c;--mu:#667085;--bd:#dfe3ea;--ac:#3b6cff;--ac2:#18b394;--wf:#3b6cff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0d0f14;--card:#171a22;--tx:#e8ebf2;--mu:#8b93a7;--bd:#262b38;--ac:#6c8cff;--ac2:#35d0b0;--wf:#6c8cff}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0d0f14;--card:#171a22;--tx:#e8ebf2;--mu:#8b93a7;--bd:#262b38;--ac:#6c8cff;--ac2:#35d0b0;--wf:#6c8cff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:920px;margin:0 auto;padding:28px 18px 48px}
+h1{font-size:24px;margin:0 0 2px;letter-spacing:-.02em}.sub{color:var(--mu);margin:0 0 22px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:18px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+label{display:block;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+input,select{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit}
+input:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.drop{border:2px dashed var(--bd);border-radius:14px;padding:20px;text-align:center;color:var(--mu);cursor:pointer;transition:.15s}
+.drop.on,.drop:hover{border-color:var(--ac);color:var(--tx)}
+.drop b{color:var(--tx)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;font-weight:600;padding:10px 18px;border-radius:10px;border:0;cursor:pointer;background:var(--ac);color:#fff}
+button.s{background:transparent;color:var(--tx);border:1px solid var(--bd)}button:disabled{opacity:.4;cursor:default}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);text-transform:none;letter-spacing:0;font-weight:400;margin:0}.chk input{width:auto}
+#wf{position:relative;height:170px;border-radius:12px;background:var(--bg);border:1px solid var(--bd);overflow:hidden}
+#wf canvas{position:absolute;inset:0;width:100%;height:100%}
+#ph{position:absolute;top:0;bottom:0;width:2px;background:var(--ac2);box-shadow:0 0 8px var(--ac2);left:0;pointer-events:none}
+.stats{display:flex;gap:18px;flex-wrap:wrap;color:var(--mu);font-size:13px;margin-top:10px}.stats b{color:var(--tx)}
+#msg{color:var(--mu);font-size:13px;margin-top:8px}
+.seg{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--bd);border-radius:10px;margin-top:8px;background:var(--bg)}
+.seg.on{border-color:var(--ac2);box-shadow:0 0 0 1px var(--ac2)}
+.seg .n{color:var(--mu);width:22px;font-size:13px}
+.seg .d{flex:1;min-width:160px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg .t{color:var(--mu);font-size:13px;min-width:62px;text-align:right}
+.seg input{width:76px;padding:5px 8px}
+button.i{padding:4px 10px;background:transparent;color:var(--tx);border:1px solid var(--bd)}
+.empty{color:var(--mu);font-size:13px;padding:6px 0}
+</style></head><body><main>
+<h1>TI LPC Speech Synthesizer</h1>
+<p class="sub">Decode TMS5100 / 5110 / 5220-family speech ROM dumps to 48 kHz audio.</p>
+<div class="card"><div class="drop" id="drop"><b>Drop a .bin file here</b> or click to choose<div id="fname" class="mono" style="margin-top:6px;font-size:13px">no file loaded</div></div><input type="file" id="file" hidden></div>
+<div class="card"><div class="grid">
+<div><label>Chip</label><select id="chip"></select></div>
+<div><label>Start address (hex)</label><input id="addr" class="mono" value="0"></div>
+<div><label>Max frames (0 = no limit)</label><input id="maxf" type="number" min="0" value="400"></div>
+<div><label>Sample rate (Hz)</label><input id="sr" type="number" min="1000" value="8000"></div>
+<div><label>Frame length (ms)</label><input id="fms" type="number" step="0.5" min="1" value="25"></div>
+<div><label>Bit order</label><select id="bo"><option value="lsb">LSB first (ROM order)</option><option value="msb">MSB first</option></select></div>
+<div><label>Gain</label><input id="gain" type="number" step="0.1" min="0" value="1"></div>
+</div><div class="row" style="margin-top:14px"><label class="chk"><input type="checkbox" id="stp" checked> Stop at first stop frame</label>
+<label class="chk"><input type="checkbox" id="pulse"> CAT AUTO Controller (Regular Pulse-Train)</label></div><div id="poleinfo" class="mono" style="font-size:13px;color:var(--mu);margin-top:10px"></div></div>
+<div class="card"><div id="wf"><canvas id="cv"></canvas><div id="ph"></div></div>
+<div class="row" style="margin-top:14px"><button id="play" disabled>▶ Play</button><button id="dl" class="s" disabled>Download .wav</button><span class="mono" id="tm" style="color:var(--mu)">0.000 / 0.000 s</span></div>
+<div class="stats" id="st"></div><div id="msg"></div></div>
+<div class="card"><div class="row" style="justify-content:space-between"><b>Segment list</b><span class="mono" id="stot" style="color:var(--mu);font-size:13px"></span></div>
+<p class="sub" style="margin:4px 0 0;font-size:13px">Chain speech from the same file (different addresses) or from different files, with silence in between. “Add segment” stores the current file, chip, address and decode settings; sample rate, frame length and pulse options apply to the whole list.</p>
+<div id="seglist"></div>
+<div class="row" style="margin-top:14px"><button id="addseg" class="s">+ Add current segment</button>
+<span class="row" style="gap:6px"><button id="addsil" class="s">+ Add silence</button><span style="color:var(--mu)">×</span><input id="silmult" type="number" step="0.5" min="0" value="1" style="width:80px"><span style="color:var(--mu);font-size:13px">frames</span></span>
+<button id="clrseg" class="s">Clear list</button></div>
+<div class="row" style="margin-top:14px"><button id="lplay" disabled>▶ Play list</button><button id="ldl" class="s" disabled>Download list .wav</button></div>
+<div id="smsg" style="color:var(--mu);font-size:13px;margin-top:8px"></div></div>
+
+</main><script>
+const T={"E":{"patent":[0,0,1,1,2,3,5,7,10,15,21,30,43,61,86,0],"later":[0,1,2,3,4,6,8,11,16,23,33,47,63,85,114,0]},"P":{"p0280":[0,41,43,45,47,49,51,53,55,58,60,63,66,70,73,76,79,83,87,90,94,99,103,107,112,118,123,129,134,140,147,153],"p2802":[0,16,18,19,21,24,26,28,31,35,37,42,44,47,50,53,56,59,63,67,71,75,79,84,89,94,100,106,112,126,141,150],"p5110":[0,15,16,17,19,21,22,25,26,29,32,36,40,42,46,50,55,60,64,68,72,76,80,84,86,93,101,110,120,132,144,159],"p2501":[0,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,34,36,38,40,41,43,45,48,49,51,54,55,57,60,62,64,68,72,74,76,81,85,87,90,96,99,103,107,112,117,122,127,133,139,145,151,157,164,171,178,186,194,202,211],"p5220":[0,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,44,46,48,50,52,53,56,58,60,62,65,68,70,72,76,78,80,84,86,91,94,98,101,105,109,114,118,122,127,132,137,142,148,153,159]},"K":{"patent":[[-501,-497,-493,-488,-480,-471,-460,-446,-427,-405,-378,-344,-305,-259,-206,-148,-86,-21,45,110,171,227,277,320,357,388,413,434,451,464,474,498],[-349,-328,-305,-280,-252,-223,-192,-158,-124,-88,-51,-14,23,60,97,133,167,199,230,259,286,310,333,354,372,389,404,417,429,439,449,506],[-397,-365,-327,-282,-229,-170,-104,-36,35,104,169,228,281,326,364,396],[-369,-334,-293,-245,-191,-131,-67,-1,64,128,188,243,291,332,367,397],[-319,-286,-250,-211,-168,-122,-74,-25,24,73,121,167,210,249,285,318],[-290,-252,-209,-163,-114,-62,-9,44,97,147,194,238,278,313,344,371],[-291,-256,-216,-174,-128,-80,-31,19,69,117,163,206,246,283,316,345],[-218,-133,-38,59,152,235,305,361],[-226,-157,-82,-3,76,151,220,280],[-179,-122,-61,1,62,123,179,231]],"l2801":[[-501,-498,-495,-490,-485,-478,-469,-459,-446,-431,-412,-389,-362,-331,-295,-253,-207,-156,-102,-45,13,70,126,179,228,272,311,345,374,399,420,437],[-376,-357,-335,-312,-286,-258,-227,-195,-161,-124,-87,-49,-10,29,68,106,143,178,212,243,272,299,324,346,366,384,400,414,427,438,448,506],[-407,-381,-349,-311,-268,-218,-162,-102,-39,25,89,149,206,257,302,341],[-290,-252,-209,-163,-114,-62,-9,44,97,147,194,238,278,313,344,371],[-318,-283,-245,-202,-156,-107,-56,-3,49,101,150,196,239,278,313,344],[-193,-152,-109,-65,-20,26,71,115,158,198,235,270,301,330,355,377],[-254,-218,-180,-140,-97,-53,-8,36,81,124,165,204,240,274,304,332],[-205,-112,-10,92,187,269,336,387],[-249,-183,-110,-32,48,126,198,261],[-190,-133,-73,-10,53,115,173,227]],"l2802":[[-501,-498,-495,-490,-485,-478,-469,-459,-446,-431,-412,-389,-362,-331,-295,-253,-207,-156,-102,-45,13,70,126,179,228,272,311,345,374,399,420,437],[-376,-357,-335,-312,-286,-258,-227,-195,-161,-124,-87,-49,-10,29,68,106,143,178,212,243,272,299,324,346,366,384,400,414,427,438,448,506],[-407,-381,-349,-311,-268,-218,-162,-102,-39,25,89,149,206,257,302,341],[-289,-248,-202,-152,-98,-43,14,71,125,177,225,269,307,341,371,506],[-318,-283,-245,-202,-156,-107,-56,-3,49,101,150,196,239,278,313,344],[-193,-152,-109,-65,-20,26,71,115,158,198,235,270,301,330,355,377],[-254,-218,-180,-140,-97,-53,-8,36,81,124,165,204,240,274,304,332],[-205,-112,-10,92,187,269,336,387],[-249,-183,-110,-32,48,126,198,261],[-190,-133,-73,-10,53,115,173,227]],"l5220":[[-501,-498,-497,-495,-493,-491,-488,-482,-478,-474,-469,-464,-459,-452,-445,-437,-412,-380,-339,-288,-227,-158,-81,-1,80,157,226,287,337,379,411,436],[-328,-303,-274,-244,-211,-175,-138,-99,-59,-18,24,64,105,143,180,215,248,278,306,331,354,374,392,408,422,435,445,455,463,470,476,506],[-441,-387,-333,-279,-225,-171,-117,-63,-9,45,98,152,206,260,314,368],[-328,-273,-217,-161,-106,-50,5,61,116,172,228,283,339,394,450,506],[-328,-282,-235,-189,-142,-96,-50,-3,43,90,136,182,229,275,322,368],[-256,-212,-168,-123,-79,-35,10,54,98,143,187,232,276,320,365,409],[-308,-260,-212,-164,-117,-69,-21,27,75,122,170,218,266,314,361,409],[-256,-161,-66,29,124,219,314,409],[-256,-176,-96,-15,65,146,226,307],[-205,-132,-59,14,87,160,234,307]]},"C":{"patent":[0,42,-44,50,-78,18,37,20,2,-31,-59,2,95,90,5,15,38,-4,-91,-91,-42,-35,-36,-4,37,43,34,33,15,-1,-8,-18,-19,-17,-9,-10,-6,0,3,2,1,0,0,0,0,0,0,0,0,0,0,0],"c2801":[0,43,-44,51,-77,18,37,20,2,-30,-58,3,96,91,5,15,38,-4,-90,-91,-42,-35,-35,-3,37,43,35,34,15,-1,-8,-17,-19,-17,-9,-9,-6,1,4,3,1,0,0,0,0,0,0,0,0,0,0,0],"c2802":[0,-91,-67,-18,52,115,126,61,-24,-22,52,36,-47,1,19,-61,12,-46,-25,-35,-39,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"later":[0,3,15,40,76,108,113,80,37,38,76,68,26,50,59,19,55,26,37,31,29,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}};
+const CH={
+tms5100:{n:"TMS5100 / TMC0281 (Speak & Spell, 1978)",E:"patent",P:"p0280",K:"patent",C:"patent",pb:5},
+tmc0281d:{n:"TMC0281D (later Speak & Spell)",E:"later",P:"p0280",K:"patent",C:"patent",pb:5},
+cd2801:{n:"TMC0280 / CD2801 (Speak & Math, Speak & Read)",E:"later",P:"p0280",K:"l2801",C:"c2801",pb:5},
+tms5110a:{n:"TMS5110A / TMS5111",E:"later",P:"p5110",K:"l5220",C:"later",pb:5},
+t2802:{n:"TMC0280F-2802 (Touch & Tell)",E:"later",P:"p2802",K:"l2802",C:"c2802",pb:5},
+tms5220:{n:"TMS5220 / TMS5220C",E:"later",P:"p5220",K:"l5220",C:"later",pb:6},
+cd2501e:{n:"CD2501E (TMS5220 pitch range, 2501E table)",E:"later",P:"p2501",K:"l2801",C:"later",pb:6}};
+const KB=[5,5,4,4,4,4,4,3,3,3],$=i=>document.getElementById(i);
+for(const k in CH)$("chip").add(new Option(CH[k].n,k));
+$("chip").value="tms5220";
+let data=null,wav=null,nat48=null,url=null,dirty=true,busy=false;
+const DEEMP={patent:0.29,c2801:0.29,c2802:0.54,later:0.90};
+function decode(c,o){
+  const data=o.data;
+  const E=T.E[c.E],P=T.P[c.P],K=T.K[c.K],end=data.length,lim=(end-o.start)*8;
+  let pos=0;const rd=n=>{let v=0;for(let i=0;i<n;i++,pos++){const b=data[o.start+(pos>>3)];v=(v<<1)|(o.lsb?(b>>(pos&7))&1:(b>>(7-(pos&7)))&1)}return v};
+  const fr=[];let lastK=Array(10).fill(0),lastP=0,stops=0,trunc=false;
+  while((!o.maxf||fr.length<o.maxf)&&pos+4<=lim){
+    const e=rd(4);
+    if(e==15){stops++;if(o.stop)break;pos=(pos+7)&~7;fr.push({E:0,P:lastP,K:lastK.slice()});continue}
+    if(e==0){fr.push({E:0,P:lastP,K:lastK.slice()});continue}
+    if(pos+1+c.pb>lim){trunc=true;break}
+    const rep=rd(1),pi=rd(c.pb),p=P[pi];let k=lastK.slice();
+    if(!rep){
+      const need=KB.slice(0,p?10:4).reduce((a,b)=>a+b,0);
+      if(pos+need>lim){trunc=true;break}
+      k=Array(10).fill(0);
+      for(let i=0;i<(p?10:4);i++)k[i]=K[i][rd(KB[i])]/512;
+    }
+    lastK=k;lastP=p;fr.push({E:E[e],P:p,K:k.slice()});
+  }
+  return{fr,bytes:Math.ceil(pos/8),stops,trunc};
+}
+// ---- Synthesis -------------------------------------------------------------------------------
+// Synth state. The lattice filter (x, u) and its last coefficients (k) persist across consecutive speech
+// segments, so silence (list items, or E=0 frames in the data) only mutes the filter's input and lets it
+// ring down instead of cutting the output.
+// The excitation generator (pitch phase, noise LFSR, pulse de-emphasis) is reset per list item.
+function newState(){return{x:Array(10).fill(0),u:Array(11).fill(0),k:Array(10).fill(0),pc:0,rng:0x1fff,dy:0}}
+function resetExcitation(S){S.pc=0;S.rng=0x1fff;S.dy=0}
+const clip12=v=>Math.max(-2048,Math.min(2047,v))/2048;
+// Advance the 10-stage lattice by one sample with coefficients k and excitation input; returns output.
+function lattice(S,k,input){
+  const x=S.x,u=S.u;
+  u[10]=input;
+  for(let i=9;i>=0;i--)u[i]=u[i+1]-k[i]*x[i];
+  for(let i=9;i>=1;i--)x[i]=x[i-1]+k[i-1]*u[i-1];
+  x[0]=u[0];
+  return clip12(u[0]);
+}
+// Silence: run the filter for n samples with its input muted (zero excitation, last coefficients), so
+// whatever the previous speech left in the filter rings down naturally instead of being cut off.
+function silence(S,n){const out=new Float32Array(n);for(let i=0;i<n;i++)out[i]=lattice(S,S.k,0);return out}
+
+// Synthesize decoded frames with chip-accurate interpolation: each frame reaches its own target values
+// at its start, then ramps linearly (sample by sample) toward the next frame's values, arriving as that
+// frame begins. Interpolation happens between two voiced frames (E != 0 and pitch != 0) or between two
+// unvoiced frames (E != 0 and pitch == 0); otherwise (mixed, or a silent E=0 frame) the values are held
+// and step at the boundary.
+// The Gain control scales the excitation fed into the lattice filter (before the 12-bit output clip).
+// pulse: use a de-emphasised impulse per pitch period instead of the chirp table.
+function synth(fr,c,rate,fms,pulse,S){
+  S=S||newState();
+  const R=rate*fms/1000,ch=T.C[c.C],voiced=f=>f&&f.E!=0&&f.P!=0,unvoiced=f=>f&&f.E!=0&&f.P==0,
+    same=(a,b)=>(voiced(a)&&voiced(b))||(unvoiced(a)&&unvoiced(b)),
+    gv=parseFloat($("gain").value),g=isNaN(gv)?1:gv;
+  const out=new Float32Array(Math.round(fr.length*R));
+  let o=0,{pc,rng,dy}=S;
+  // Pulse train: a bare impulse has a flat spectrum while the chirp tables roll off, so the impulse is
+  // passed through a one-pole lowpass y[n]=A*d[n]+a*y[n-1], with A chosen so the pulse energy
+  // A^2/(1-a^2) matches the chirp's (~65500), keeping the voiced level consistent.
+  const DEEMP_A=DEEMP[c.C]??0.5,PULSE_AMP=Math.sqrt(65500*(1-DEEMP_A*DEEMP_A));
+  for(let fi=0;fi<fr.length;fi++){
+    const tg=fr[fi],B=tg.E!=0&&same(tg,fr[fi+1])?fr[fi+1]:tg,N=Math.round((fi+1)*R)-Math.round(fi*R),k=S.k;
+    for(let n=0;n<N;n++){
+      const w=B===tg?0:n/N,Ei=tg.E+(B.E-tg.E)*w,Pi=tg.P+(B.P-tg.P)*w;
+      for(let i=0;i<10;i++)k[i]=tg.K[i]+(B.K[i]-tg.K[i])*w;
+      let ex;
+      if(tg.P==0){ex=(rng&1)?-64:64;dy=0}                          // unvoiced: bipolar noise
+      else if(pulse){dy=(pc===0?PULSE_AMP:0)+DEEMP_A*dy;ex=dy}      // voiced: de-emphasised impulse
+      else{ex=ch[Math.min(pc,51)];dy=0}                            // voiced: chirp table
+      out[o++]=lattice(S,k,g*Ei*ex/8);
+      rng=((rng<<1)|(((rng>>12)^(rng>>3)^(rng>>2)^rng)&1))&0x1fff;
+      if(++pc>=Math.round(Pi)||tg.P==0)pc=0;
+    }
+  }
+  Object.assign(S,{pc,rng,dy});
+  return out;
+}
+function mkwav(s){
+  const b=new ArrayBuffer(44+s.length*2),v=new DataView(b),w=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};
+  w(0,"RIFF");v.setUint32(4,36+s.length*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,48000,true);v.setUint32(28,96000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,s.length*2,true);
+  for(let i=0;i<s.length;i++)v.setInt16(44+i*2,Math.round(Math.max(-1,Math.min(1,s[i]))*32767),true);
+  return new Blob([b],{type:"audio/wav"});
+}
+let curMode="single",segs=[];
+const parseAddr=()=>parseInt($("addr").value.replace(/^0x/i,""),16)||0,hex=v=>v.toString(16).toUpperCase();
+const readOpts=()=>({maxf:+$("maxf").value|0,lsb:$("bo").value=="lsb",stop:$("stp").checked});
+async function begin(){stopAudio();$("ph").style.left="0%";$("msg").textContent="Synthesizing…";$("smsg").textContent="";await new Promise(r=>setTimeout(r,40))}
+function getOpts(){return{rate:+$("sr").value||8000,fms:+$("fms").value||25,pulse:$("pulse").checked}}
+function finish(nat,rate,mode){
+  const n48=Math.floor(nat.length*48000/rate),o=new Float32Array(n48);
+  for(let i=0;i<n48;i++)o[i]=Math.max(-1,Math.min(1,nat[Math.floor(i*rate/48000)]));
+  nat48=o;wav=mkwav(o);if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(wav);curMode=mode;
+  $("play").disabled=$("dl").disabled=false;$("lplay").disabled=$("ldl").disabled=!segs.length;
+  $("play").textContent="▶ Play";$("lplay").textContent="▶ Play list";
+  return n48;
+}
+function synthSeg(sg,O,S){
+  if(sg.type=="silence")return silence(S,Math.max(0,Math.round(sg.mult*O.rate*O.fms/1000)));
+  const c=CH[sg.chip],d=decode(c,{data:sg.data,start:sg.addr,maxf:sg.maxf,lsb:sg.lsb,stop:sg.stop});
+  return synth(d.fr,c,O.rate,O.fms,O.pulse,S);
+}
+async function runList(){
+  if(!segs.length){$("smsg").textContent="The list is empty.";return false}
+  await begin();
+  const O=getOpts(),parts=[],S=newState();let n=0;
+  for(let si=0;si<segs.length;si++){const sg=segs[si],a=synthSeg(sg,O,S);resetExcitation(S);sg.t0=n/O.rate;n+=a.length;sg.t1=n/O.rate;parts.push(a)}
+  if(!n){$("msg").textContent="";$("smsg").textContent="The list contains no audio (only zero-length silence).";segs.forEach(x=>x.t0=x.t1=null);draw();return false}
+  const nat=new Float32Array(n);let p=0;for(const a of parts){nat.set(a,p);p+=a.length}
+  const n48=finish(nat,O.rate,"list");
+  const ns=segs.filter(x=>x.type=="speech").length;
+  $("st").innerHTML="<span><b>"+segs.length+"</b> segments ("+ns+" speech, "+(segs.length-ns)+" silence)</span><span><b>"+(n48/48000).toFixed(3)+"</b> s</span>";
+  $("msg").textContent="";draw();upd();dirty=false;return true;
+}
+async function run(){
+  if(!data)return false;
+  await begin();
+  const c=CH[$("chip").value],O=getOpts(),start=parseAddr();
+  if(start>=data.length){$("msg").textContent="Start address is beyond the end of the file ("+hex(data.length)+" bytes).";return false}
+  const d=decode(c,{data,start,...readOpts()});
+  if(!d.fr.length){$("msg").textContent="No frames decoded at this address.";return false}
+  const n48=finish(synth(d.fr,c,O.rate,O.fms,O.pulse),O.rate,"single");
+  $("st").innerHTML="<span><b>"+d.fr.length+"</b> frames</span><span><b>"+(n48/48000).toFixed(3)+"</b> s</span><span>ends at <b class=mono>0x"+hex(start+d.bytes)+"</b></span><span><b>"+d.bytes+"</b> bytes read</span><span><b>"+d.stops+"</b> stop frame"+(d.stops==1?"":"s")+"</span>";
+  $("msg").textContent=d.trunc?"Data ended in the middle of a frame; the partial frame was discarded.":"";
+  draw();upd();dirty=false;return true;
+}
+function draw(){
+  const cv=$("cv"),r=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W||!H)return;
+  cv.width=W*r;cv.height=H*r;
+  const g=cv.getContext("2d"),cs=getComputedStyle(document.documentElement),css=n=>cs.getPropertyValue(n);
+  g.scale(r,r);g.strokeStyle=css("--bd");g.beginPath();g.moveTo(0,H/2);g.lineTo(W,H/2);g.stroke();
+  if(!nat48)return;
+  g.fillStyle=css("--wf");
+  const sp=nat48.length/W,h=H/2*.95;
+  for(let x=0;x<W;x++){let lo=1,hi=-1;
+    for(let i=Math.floor(x*sp),e=Math.min(nat48.length,Math.max(i+1,Math.floor((x+1)*sp)));i<e;i++){const v=nat48[i];if(v<lo)lo=v;if(v>hi)hi=v}
+    g.fillRect(x,H/2-hi*h,1,Math.max(1,(hi-lo)*h))}
+  if(curMode=="list"){const dur=nat48.length/48000;g.fillStyle=css("--mu");
+    for(const sg of segs){if(sg.t0==null)continue;const x0=sg.t0/dur*W,x1=sg.t1/dur*W;
+      if(sg.type=="silence"){g.globalAlpha=.14;g.fillRect(x0,0,Math.max(1,x1-x0),H)}
+      g.globalAlpha=.7;g.fillRect(x0,0,1,H)}
+    g.globalAlpha=1}
+}
+let ctx=null,srcN=null,t0=0,playing=false;
+function hl(t){const rows=document.querySelectorAll("#seglist .seg");segs.forEach((x,i)=>{const r=rows[i];if(r)r.classList.toggle("on",t>=0&&x.t0!=null&&t>=x.t0&&t<x.t1)})}
+function stopAudio(){if(srcN){srcN.onended=null;try{srcN.stop()}catch(e){}srcN=null}playing=false;$("play").textContent="▶ Play";$("lplay").textContent="▶ Play list";hl(-1)}
+function startAudio(){stopAudio();const b=ctx.createBuffer(1,nat48.length,48000);b.copyToChannel(nat48,0);srcN=ctx.createBufferSource();srcN.buffer=b;srcN.connect(ctx.destination);srcN.onended=()=>{if(playing){stopAudio();upd()}};t0=ctx.currentTime;srcN.start();playing=true;(curMode=="list"?$("lplay"):$("play")).textContent="■ Stop";upd()}
+function upd(){const d=nat48?nat48.length/48000:0,t=playing?Math.min(d,ctx.currentTime-t0):0;
+  $("ph").style.left=(d?t/d*100:0)+"%";$("tm").textContent=t.toFixed(3)+" / "+d.toFixed(3)+" s";
+  hl(playing&&curMode=="list"?t:-1);
+  if(playing)requestAnimationFrame(upd)}
+async function ensure(mode){
+ if(!dirty&&nat48&&curMode==mode)return true;
+ busy=true;const ok=await(mode=="list"?runList():run());busy=false;return ok}
+async function doPlay(mode){if(busy)return;if(playing){stopAudio();upd();return}
+ if(!ctx){try{ctx=new AudioContext({sampleRate:48000})}catch(e){ctx=new AudioContext()}}
+ if(ctx.state!=="running")await ctx.resume();
+ if(await ensure(mode))startAudio()}
+$("play").onclick=()=>doPlay("single");$("lplay").onclick=()=>doPlay("list");
+async function doDl(mode){if(busy||!await ensure(mode))return;const a=document.createElement("a");a.href=url;a.download=mode=="list"?"speech_list.wav":(($("fname").dataset.n||"speech").replace(/\.[^.]*$/,""))+"_"+$("addr").value+".wav";a.click()}
+$("dl").onclick=()=>doDl("single");$("ldl").onclick=()=>doDl("list");
+function load(f){const r=new FileReader();r.onload=()=>{data=new Uint8Array(r.result);$("fname").textContent=f.name+" — "+data.length+" bytes";$("fname").dataset.n=f.name;dirty=true;nat48=null;wav=null;$("play").disabled=$("dl").disabled=false;draw();$("st").innerHTML="";$("msg").textContent="Press Play to synthesize."};r.readAsArrayBuffer(f)}
+$("drop").onclick=()=>$("file").click();$("file").onchange=e=>e.target.files[0]&&load(e.target.files[0]);
+$("drop").ondragover=e=>{e.preventDefault();$("drop").classList.add("on")};$("drop").ondragleave=()=>$("drop").classList.remove("on");
+$("drop").ondrop=e=>{e.preventDefault();$("drop").classList.remove("on");e.dataTransfer.files[0]&&load(e.dataTransfer.files[0])};
+for(const i of["chip","addr","maxf","sr","fms","bo","gain","stp","pulse"])$(i).addEventListener("input",()=>{dirty=true});
+function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function segDur(sg,fms){return sg.type=="silence"?sg.mult*fms/1000:sg.frames*fms/1000}
+function updDurs(){const fms=+$("fms").value||25;let tot=0;segs.forEach(sg=>{const d=segDur(sg,fms);tot+=d;if(sg.durEl)sg.durEl.textContent=d.toFixed(3)+" s"});
+  $("stot").textContent=segs.length?segs.length+" segment"+(segs.length==1?"":"s")+" · ≈ "+tot.toFixed(3)+" s":""}
+function segEdited(){dirty=true;segs.forEach(x=>{x.t0=x.t1=null});$("lplay").disabled=$("ldl").disabled=!segs.length;if(curMode=="list")draw()}
+function renderSegs(){
+  const L=$("seglist");L.innerHTML="";
+  if(!segs.length)L.appendChild(el("div","empty","No segments yet."));
+  segs.forEach((sg,i)=>{
+    const r=el("div","seg");r.appendChild(el("span","n mono",String(i+1)));
+    const d=el("div","d");
+    if(sg.type=="silence"){
+      d.style.display="flex";d.style.alignItems="center";d.style.gap="8px";d.appendChild(el("span",null,"Silence ×"));
+      const inp=el("input","mono");inp.type="number";inp.step="0.5";inp.min="0";inp.value=sg.mult;
+      inp.oninput=()=>{sg.mult=Math.max(0,+inp.value||0);segEdited();updDurs()};
+      d.appendChild(inp);d.appendChild(el("span",null,"frames"));
+    }else{
+      d.classList.add("mono");d.textContent=sg.name+" @0x"+hex(sg.addr)+" · "+CH[sg.chip].n.split(" ")[0]+" · "+sg.frames+" fr · ends 0x"+hex(sg.end);
+      d.title=sg.name+" — "+CH[sg.chip].n+(sg.lsb?", LSB first":", MSB first")+(sg.stop?", stops at stop frame":"")+(sg.maxf?", max "+sg.maxf+" frames":"");
+    }
+    r.appendChild(d);sg.durEl=el("span","t mono");r.appendChild(sg.durEl);
+    const mk=(txt,fn,dis)=>{const b=el("button","i",txt);b.disabled=!!dis;b.onclick=fn;return b};
+    r.appendChild(mk("▲",()=>{[segs[i-1],segs[i]]=[segs[i],segs[i-1]];segEdited();renderSegs()},i==0));
+    r.appendChild(mk("▼",()=>{[segs[i+1],segs[i]]=[segs[i],segs[i+1]];segEdited();renderSegs()},i==segs.length-1));
+    r.appendChild(mk("✕",()=>{segs.splice(i,1);segEdited();renderSegs()}));
+    L.appendChild(r);
+  });
+  updDurs();
+}
+$("addseg").onclick=()=>{
+  const m=$("smsg");m.textContent="";
+  if(!data){m.textContent="Load a .bin file first.";return}
+  const chip=$("chip").value,c=CH[chip],addr=parseAddr();
+  if(addr>=data.length){m.textContent="Start address is beyond the end of the file.";return}
+  const o={data,start:addr,...readOpts()},d=decode(c,o);
+  if(!d.fr.length){m.textContent="No frames decoded at this address.";return}
+  segs.push({type:"speech",name:$("fname").dataset.n||"file",data,chip,addr,maxf:o.maxf,lsb:o.lsb,stop:o.stop,frames:d.fr.length,bytes:d.bytes,end:addr+d.bytes});
+  segEdited();renderSegs();
+};
+$("addsil").onclick=()=>{$("smsg").textContent="";segs.push({type:"silence",mult:Math.max(0,+$("silmult").value||0)});segEdited();renderSegs()};
+$("clrseg").onclick=()=>{segs=[];segEdited();renderSegs();$("smsg").textContent=""};
+$("fms").addEventListener("input",updDurs);
+function poleInfo(){const c=CH[$("chip").value],a=DEEMP[c.C]??0.5;
+  $("poleinfo").textContent=!$("pulse").checked?"":"Pulse de-emphasis pole a = "+a.toFixed(2)+" (one-pole lowpass, matched to chirp table “"+c.C+"”)"}
+$("chip").addEventListener("input",poleInfo);$("pulse").addEventListener("input",poleInfo);
+poleInfo();renderSegs();
+addEventListener("resize",draw);draw();
+</script></body></html>
