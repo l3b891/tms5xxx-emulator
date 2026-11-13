@@ -118,11 +118,11 @@ function lattice(S,k,input){
 // whatever the previous speech left in the filter rings down naturally instead of being cut off.
 function silence(S,n){const out=new Float32Array(n);for(let i=0;i<n;i++)out[i]=lattice(S,S.k,0);return out}
 
-// Synthesize decoded frames with chip-accurate interpolation: each frame reaches its own target values
-// at its start, then ramps linearly (sample by sample) toward the next frame's values, arriving as that
-// frame begins. Interpolation happens between two voiced frames (E != 0 and pitch != 0) or between two
-// unvoiced frames (E != 0 and pitch == 0); otherwise (mixed, or a silent E=0 frame) the values are held
-// and step at the boundary.
+// Synthesize decoded frames. Parameters are linearly interpolated sample-by-sample, centre-aligned:
+// each frame's values are reached at its midpoint and move linearly toward the neighbouring frame's
+// midpoint. Interpolation happens between two voiced frames (E != 0 and pitch != 0) or between two
+// unvoiced frames (E != 0 and pitch == 0); otherwise (mixed, or a silent E=0 frame) a frame's values are
+// held and step at the boundary.
 // The Gain control scales the excitation fed into the lattice filter (before the 12-bit output clip).
 // pulse: use a de-emphasised impulse per pitch period instead of the chirp table.
 function synth(fr,c,rate,fms,pulse,S){
@@ -137,10 +137,14 @@ function synth(fr,c,rate,fms,pulse,S){
   // A^2/(1-a^2) matches the chirp's (~65500), keeping the voiced level consistent.
   const DEEMP_A=DEEMP[c.C]??0.5,PULSE_AMP=Math.sqrt(65500*(1-DEEMP_A*DEEMP_A));
   for(let fi=0;fi<fr.length;fi++){
-    const tg=fr[fi],B=tg.E!=0&&same(tg,fr[fi+1])?fr[fi+1]:tg,N=Math.round((fi+1)*R)-Math.round(fi*R),k=S.k;
+    const tg=fr[fi],prv=fr[fi-1],nxt=fr[fi+1],N=Math.round((fi+1)*R)-Math.round(fi*R),k=S.k,
+      fromPrev=tg.E!=0&&same(prv,tg),toNext=tg.E!=0&&same(tg,nxt);
     for(let n=0;n<N;n++){
-      const w=B===tg?0:n/N,Ei=tg.E+(B.E-tg.E)*w,Pi=tg.P+(B.P-tg.P)*w;
-      for(let i=0;i<10;i++)k[i]=tg.K[i]+(B.K[i]-tg.K[i])*w;
+      const f=(n+0.5)/N;
+      let A=tg,B=tg,w=0;
+      if(f<0.5){if(fromPrev){A=prv;B=tg;w=f+0.5}}else if(toNext){A=tg;B=nxt;w=f-0.5}
+      const Ei=A.E+(B.E-A.E)*w,Pi=A.P+(B.P-A.P)*w;
+      for(let i=0;i<10;i++)k[i]=A.K[i]+(B.K[i]-A.K[i])*w;
       let ex;
       if(tg.P==0){ex=(rng&1)?-64:64;dy=0}                          // unvoiced: bipolar noise
       else if(pulse){dy=(pc===0?PULSE_AMP:0)+DEEMP_A*dy;ex=dy}      // voiced: de-emphasised impulse
